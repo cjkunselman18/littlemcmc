@@ -23,6 +23,7 @@ import numpy as np
 from fastprogress.fastprogress import progress_bar
 
 from . import parallel_sampling as ps
+from .parallel_sampling import Draw
 from .nuts import NUTS
 from .hmc import HamiltonianMC
 from .quadpotential import QuadPotential, QuadPotentialDiagAdapt, QuadPotentialFullAdapt
@@ -47,7 +48,7 @@ def sample(
     discard_tuned_samples: bool = True,
     chain_idx: int = 0,
     callback=None,
-    mp_ctx=None,
+    mp_ctx='spawn',
     pickle_backend: str = "pickle",
     **kwargs,
 ):
@@ -236,7 +237,7 @@ def _mp_sample(
     trace=None,
     callback=None,
     discard_tuned_samples=True,
-    mp_ctx=None,
+    mp_ctx='spawn',
     pickle_backend="pickle",
     **kwargs,
 ):
@@ -450,7 +451,7 @@ def _sample(
     skip_first = kwargs.get("skip_first", 0)
 
     sampling = _iter_sample(
-        logp_dlogp_func, model_ndim, draws, tune, step, start, random_seed, callback
+        logp_dlogp_func, model_ndim, draws, tune, step, start, random_seed, callback, chain
     )
     _pbar_data = {"chain": chain, "divergences": 0}
     _desc = "Sampling chain {chain:d}, {divergences:,d} divergences"
@@ -487,6 +488,7 @@ def _iter_sample(
     start: np.ndarray,
     random_seed: Union[None, int, List[int]] = None,
     callback=None,
+    chain: int = 0,
 ):
     """
     Yield one chain in one process.
@@ -512,12 +514,18 @@ def _iter_sample(
         q, step_stats = step._astep(q)
         trace[:, i] = q
         stats.extend(step_stats)
-        if callback is not None:
-            warns = getattr(step, "warnings", None)
+        #if callback is not None:
+            #warns = getattr(step, "warnings", None)
             # FIXME: implement callbacks
-            # callback(
-            #     trace=trace, draw=(chain, i == draws, i, i < tune, stats, point, warns),
-            # )
+            #callback(
+            #     trace=trace, draw=i,
+            #)
+        if callback is not None:
+                warns = getattr(step, "warnings", None)
+                callback(
+                    trace=trace,
+                    draw=Draw(chain, i == draws, i, i < tune, stats, q, warns),
+                )
         yield trace, stats
 
 
